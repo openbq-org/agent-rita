@@ -18,7 +18,7 @@ const GenerateCodeSchema = z.object({
 export const codeRouter = new Hono();
 
 codeRouter.post("/v1/generate/code", async (c) => {
-  const raw = await c.req.json();
+  const raw = await c.req.json().catch(() => undefined); // non-JSON body -> zod 400 below, not a 500
   const parsed = GenerateCodeSchema.safeParse(raw);
   if (!parsed.success) {
     return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);

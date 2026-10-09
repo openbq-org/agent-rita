@@ -28,7 +28,7 @@ const WidgetInfoSchema = z.object({
 export const widgetInfoRouter = new Hono();
 
 widgetInfoRouter.post("/v1/generate/widget_info", async (c) => {
-  const raw = await c.req.json();
+  const raw = await c.req.json().catch(() => undefined); // non-JSON body -> zod 400 below, not a 500
   const parsed = WidgetInfoSchema.safeParse(raw);
   if (!parsed.success) {
     return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);

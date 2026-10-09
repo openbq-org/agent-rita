@@ -89,7 +89,7 @@ function parseWorkspaceState(raw: unknown): WorkspaceState | null {
 export const queryRouter = new Hono();
 
 queryRouter.post("/v1/query", async (c) => {
-  const raw = await c.req.json();
+  const raw = await c.req.json().catch(() => undefined); // non-JSON body -> zod 400 below, not a 500
   const parsed = QueryRequestSchema.safeParse(raw);
   if (!parsed.success) {
     logger.error("Invalid request", { issues: parsed.error.issues });

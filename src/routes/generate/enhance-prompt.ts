@@ -37,7 +37,7 @@ function extractWidgetNames(widgets: unknown): string[] {
 export const enhancePromptRouter = new Hono();
 
 enhancePromptRouter.post("/v1/enhance_prompt", async (c) => {
-  const raw = await c.req.json();
+  const raw = await c.req.json().catch(() => undefined); // non-JSON body -> zod 400 below, not a 500
   const parsed = EnhancePromptSchema.safeParse(raw);
   if (!parsed.success) {
     return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);

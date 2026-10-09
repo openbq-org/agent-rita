@@ -258,3 +258,25 @@ describe("/v1/generate/code", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("/v1/generate/* — malformed (non-JSON) body", () => {
+  for (const path of [
+    "/v1/generate/chat/title",
+    "/v1/generate/dashboard/title",
+    "/v1/enhance_prompt",
+    "/v1/generate/widget_info",
+    "/v1/generate/code",
+  ]) {
+    it(`${path}: 400, not 500`, async () => {
+      const res = await app().request(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not json",
+      });
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string; details: unknown[] };
+      expect(body.error).toBe("Invalid request");
+      expect(body.details.length).toBeGreaterThan(0);
+    });
+  }
+});

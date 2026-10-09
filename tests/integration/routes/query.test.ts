@@ -83,4 +83,16 @@ describe("POST /v1/query — validation", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("400, not 500, on a malformed (non-JSON) body", async () => {
+    const res = await app().request("/v1/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not json",
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; details: unknown[] };
+    expect(body.error).toBe("Invalid request");
+    expect(body.details.length).toBeGreaterThan(0);
+  });
 });

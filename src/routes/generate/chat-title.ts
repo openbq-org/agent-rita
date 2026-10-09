@@ -13,7 +13,7 @@ const ChatTitleSchema = z.object({
 export const chatTitleRouter = new Hono();
 
 chatTitleRouter.post("/v1/generate/chat/title", async (c) => {
-  const raw = await c.req.json();
+  const raw = await c.req.json().catch(() => undefined); // non-JSON body -> zod 400 below, not a 500
   const parsed = ChatTitleSchema.safeParse(raw);
   if (!parsed.success) {
     return c.json({ error: "Invalid request", details: parsed.error.issues }, 400);
