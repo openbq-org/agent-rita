@@ -133,15 +133,18 @@ const SUGGESTIONS_RULES =
   "suggestion is the exact action that unblocks it.\n" +
   "3. Otherwise, suggest the natural next step deeper into what you just showed.\n" +
   "Never suggest something you already did in this response, and never repeat a message the user has already sent. " +
-  "CRITICAL: suggestions MUST be answerable using the widgets and data sources listed above (added to context, on the dashboard, or connected). " +
+  "CRITICAL: suggestions MUST be answerable using the widgets and data sources listed below (added to context, on the dashboard, or connected). " +
   "Never suggest questions that require data you don't have access to. " +
   "For the first message, or when no widgets are available, suggest general questions about what data the user has " +
   "connected or how you can help explore their workspace. " +
   "Keep each suggestion under 80 characters.\n";
 
 const SUGGESTIONS_PROMPT =
-  "FOLLOW-UP SUGGESTIONS:\n" +
-  "End every response with 2-3 short follow-up questions the user might want to ask next. " +
+  "FOLLOW-UP SUGGESTIONS (final answer only):\n" +
+  "Follow-up suggestions are answer text, so the RESPONSE STRUCTURE rule applies: write them only after the final " +
+  "tool result. When the request needs a tool, respond with the tool call and nothing else. " +
+  "When you write your final answer for this turn, end it with 2-3 short follow-up questions the user might want " +
+  "to ask next. " +
   SUGGESTIONS_RULES +
   "Wrap them in a <suggestions> block. For example, if your answer ended with \"Would you like me to check the " +
   "Insider Trading widget for executive holdings? If so, do you want institutional or insider holdings?\", " +
@@ -149,17 +152,19 @@ const SUGGESTIONS_PROMPT =
   "<suggestions>\n<suggestion>Check the Insider Trading widget for executive holdings</suggestion>\n" +
   "<suggestion>Use insider (named executive) holdings</suggestion>\n" +
   "<suggestion>Use institutional holdings instead</suggestion>\n</suggestions>\n" +
-  "Always include the suggestions block, even for short answers.\n";
+  "Include the block in every final answer, even short ones.\n";
 
 // SPIKE variant (suggestionsVia: "tool"). Same guidance, but routes suggestions
 // through the suggest_followups tool instead of an inline block — used only to
 // measure real-model tool-call reliability vs. the trained inline default.
 const SUGGESTIONS_TOOL_PROMPT =
-  "FOLLOW-UP SUGGESTIONS:\n" +
-  "At the end of every response, call the suggest_followups tool with 2-3 short follow-up questions the user might " +
-  "want to ask next. " +
+  "FOLLOW-UP SUGGESTIONS (final answer only):\n" +
+  "Follow-up suggestions come only after the final tool result. When the request needs another tool, call that " +
+  "tool, not suggest_followups. " +
+  "When you write your final answer for this turn, call the suggest_followups tool with 2-3 short follow-up " +
+  "questions the user might want to ask next. " +
   SUGGESTIONS_RULES +
-  "Always call suggest_followups, even for short answers — do not write the suggestions as plain text.\n";
+  "Call it in every final answer, even short ones — do not write the suggestions as plain text.\n";
 
 function describeParam(p: WidgetParam): string {
   const value = p.current_value ?? p.default_value;
@@ -374,6 +379,9 @@ export function buildSystemPrompt(
     BASE_PROMPT,
     options?.codeExecutionAvailable ? CODE_EXECUTION_AVAILABLE_PROMPT : CODE_EXECUTION_UNAVAILABLE_PROMPT,
   ];
+  if (options?.promptSuggestionsEnabled) {
+    sections.push(options.suggestionsVia === "tool" ? SUGGESTIONS_TOOL_PROMPT : SUGGESTIONS_PROMPT);
+  }
 
   const documents = request.documents ?? [];
   if (documents.length > 0) sections.push(describeUploadedDocuments(documents));
@@ -417,10 +425,6 @@ export function buildSystemPrompt(
     if (options.workspaceState) {
       sections.push(describeDashboardContext(options.workspaceState));
     }
-  }
-
-  if (options?.promptSuggestionsEnabled) {
-    sections.push(options.suggestionsVia === "tool" ? SUGGESTIONS_TOOL_PROMPT : SUGGESTIONS_PROMPT);
   }
 
   sections.push(buildDateSection(resolveTimezone(options?.timezone ?? request.timezone)));

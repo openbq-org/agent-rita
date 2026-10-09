@@ -373,6 +373,48 @@ describe("buildSystemPrompt — generative UI options", () => {
   });
 });
 
+// Regression: "End every response with … Always include the suggestions
+// block", placed last in the prompt, made qwen3.6-35b answer a first-turn tool
+// request with only a <suggestions> block and no tool call (8/10 empty). The
+// section now says suggestions belong to the final answer only, and sits before
+// the data-source listing instead of at the end.
+describe("buildSystemPrompt — follow-up suggestions", () => {
+  it("omits the section when suggestions are off", () => {
+    expect(buildSystemPrompt(req())).not.toContain("FOLLOW-UP SUGGESTIONS");
+  });
+
+  it("inline: suggestions are final-answer text and never replace a tool call", () => {
+    const out = buildSystemPrompt(req(), { promptSuggestionsEnabled: true });
+    expect(out).toContain("FOLLOW-UP SUGGESTIONS (final answer only):");
+    expect(out).toContain(
+      "Follow-up suggestions are answer text, so the RESPONSE STRUCTURE rule applies: write them only after the final " +
+        "tool result. When the request needs a tool, respond with the tool call and nothing else.",
+    );
+    expect(out).toContain("When you write your final answer for this turn, end it with 2-3 short follow-up questions");
+    expect(out).toContain("<suggestions>\n<suggestion>Check the Insider Trading widget for executive holdings</suggestion>");
+    expect(out).toContain("Include the block in every final answer, even short ones.");
+    expect(out).toContain("widgets and data sources listed below");
+    expect(out).not.toContain("End every response");
+    expect(out).not.toContain("Always include the suggestions block");
+  });
+
+  it("places the section before the data-source listing, not at the end", () => {
+    const out = buildSystemPrompt(req(), { promptSuggestionsEnabled: true });
+    const section = out.indexOf("FOLLOW-UP SUGGESTIONS");
+    expect(section).toBeGreaterThan(out.indexOf("PYTHON CODE EXECUTION"));
+    expect(section).toBeLessThan(out.indexOf("No widgets or data sources are currently available"));
+  });
+
+  it("tool spike: suggest_followups only in the final answer, never instead of another tool", () => {
+    const out = buildSystemPrompt(req(), { promptSuggestionsEnabled: true, suggestionsVia: "tool" });
+    expect(out).toContain("FOLLOW-UP SUGGESTIONS (final answer only):");
+    expect(out).toContain("When the request needs another tool, call that tool, not suggest_followups.");
+    expect(out).toContain("call the suggest_followups tool with 2-3 short follow-up questions");
+    expect(out).not.toContain("At the end of every response");
+    expect(out).not.toContain("<suggestions>");
+  });
+});
+
 // Regression guard: the system prompt must advertise exactly the MCP tools the
 // factory registered. Listing raw request.tools leaks bridge-command wrappers
 // the filter dropped, and the model calls ghosts (18x agentritamcp_update_widget,
