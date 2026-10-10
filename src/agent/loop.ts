@@ -23,6 +23,7 @@ import {
   getWidgetData,
   getWidgetDataSsrm,
   messageChunk,
+  parseSuggestions,
   promptSuggestions,
   reasoningStep,
   streamingMessageChunk,
@@ -933,12 +934,13 @@ export async function* runAgentLoop(options: AgentRunOptions): AsyncGenerator<SS
     // sanitizer on the streaming path — text-delta → sink.pushDelta → emit. It
     // weaves the deferred answer artifacts at a paragraph break (or via the
     // splitForArtifactInsertion fallback on flush) and flips answerArtifactEmitted.
-    const sink = makeTextSink({
+    const newSink = () => makeTextSink({
       deferredAnswerArtifactEvents,
       onArtifactEmitted: () => {
         answerArtifactEmitted = true;
       },
     });
+    let sink = newSink();
     // suggest_followups spike (suggestionsVia === "tool"): the tool's execute
     // records here; the final-answer dispatch emits it as promptSuggestions.
     // Must live OUTSIDE the MAX_LOOPS loop (the tools object is rebuilt each
@@ -1577,6 +1579,27 @@ export async function* runAgentLoop(options: AgentRunOptions): AsyncGenerator<SS
       // --- Widget data round-trip ---
       const widgetCall = lastStep?.toolCalls.find((tc) => tc.toolName === "get_widget_data");
       if (!widgetCall) {
+        // Some models answer a first-turn tool request with only a
+        // <suggestions> block and stop; after a client tool result, some stop
+        // with no text at all (the call was only in the reasoning). Retry
+        // either step once (loopIdx 0 only, so a second such reply passes
+        // through as before).
+        const stepText = steps.map((step) => step.text).join("");
+        if (
+          loopIdx === 0 &&
+          completedToolNames.length === 0 &&
+          (stepText.trim() === "" ||
+            (!isRebootToolTurn &&
+              /<suggestions\b/i.test(stepText) &&
+              parseSuggestions(stepText).cleanText.trim() === ""))
+        ) {
+          logger.warn("Model returned no answer text and no tool call; retrying the step once", {
+            loopIdx,
+            conversationId,
+          });
+          sink = newSink();
+          continue;
+        }
         // No round-trip — final answer. Text already streamed live; flush the
         // held tail + any un-woven artifact, then extract the <suggestions>
         // block the sink held back.
